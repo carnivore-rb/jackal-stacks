@@ -7,7 +7,10 @@ module Jackal
 
       # Setup callback
       def setup(*_)
+        require 'sfn'
+        require 'bogo-ui'
         require 'stringio'
+        require 'openssl'
         # Ensure we can build the API at startup
         stacks_api
       end
@@ -18,24 +21,24 @@ module Jackal
       # @return [Truthy, Falsey]
       def valid?(message)
         super do |payload|
-          payload.get(:data, :stacks, :template) &&
+          payload.get(:data, :stacks, :builder) &&
+            payload.get(:data, :stacks, :template) &&
             payload.get(:data, :stacks, :asset) &&
-            payload.get(:data, :stacks, :name) &&
             allowed?(payload)
         end
       end
 
-      # @return [Miasma::Models::Orchestration]
-      def stacks_api
-        memoize(:stacks_api, :direct) do
-          Miasma.api_for(
-            config.fetch(
-              :orchestration_api, Smash.new
-            ).merge(
-              :type => :orchestration
-            )
-          )
+      # @return [String] working directory
+      def working_directory
+        memoize(:working_directory, :direct) do
+          FileUtils.mkdir_p(dir = config.fetch(:working_directory, '/tmp/jackal-stack-builder'))
+          dir
         end
+      end
+
+      # @return [String] fresh working directory
+      def workspace(payload)
+        File.join(working_directory, payload[:id])
       end
 
       # Build or update stacks
@@ -43,16 +46,29 @@ module Jackal
       # @param message [Carnivore::Message]
       def execute(message)
         failure_wrap(message) do |payload|
-          directory = unpack_asset(payload)
-          stack = stacks_api.stacks.get(payload.get(:data, :stacks, :name))
-          if(stack)
-            info "Stack currently exists. Applying update [#{stack}]"
-            payload.set(:data, :stacks, :updated, true)
-            run_stack(payload, directory, :update)
-          else
-            info "Stack does not currently exist. Building new stack [#{payload.get(:data, :stacks, :name)}]"
-            payload.set(:data, :stacks, :created, true)
-            run_stack(payload, directory, :create)
+          directory = asset_store.unpack(asset_store.get(payload.get(:data, :stacks, :asset)), workspace(payload))
+          begin
+            unless(payload.get(:data, :stacks, :name))
+              payload.set(:data, :stacks, :name, stack_name(payload))
+            end
+            store_stable_asset(payload, directory)
+            begin
+              stack = stacks_api.stacks.get(payload.get(:data, :stacks, :name))
+            rescue
+              stack = nil
+            end
+            if(stack)
+              info "Stack currently exists. Applying update [#{stack}]"
+              run_stack(payload, directory, :update)
+              payload.set(:data, :stacks, :updated, true)
+            else
+              info "Stack does not currently exist. Building new stack [#{payload.get(:data, :stacks, :name)}]"
+              init_provider(payload)
+              run_stack(payload, directory, :create)
+              payload.set(:data, :stacks, :created, true)
+            end
+          ensure
+            FileUtils.rm_rf(directory)
           end
           job_completed(:stacks, payload, message)
         end
@@ -65,13 +81,25 @@ module Jackal
       # @return [Smash] stack command options hash
       def build_stack_args(payload, directory)
         Smash.new(
-          :base_directory => directory,
+          :base_directory => File.join(directory, 'cloudformation'),
           :parameters => load_stack_parameters(payload, directory),
           :ui => Bogo::Ui.new(
+            :app_name => 'JackalStacks',
             :defaults => true,
             :output_to => StringIO.new('')
           ),
-          :interactive_parameters => false
+          :interactive_parameters => false,
+          :nesting_bucket => config.get(:orchestration, :bucket_name),
+          :apply_nesting => true,
+          :processing => true,
+          :options => {
+            :disable_rollback => true,
+            :capabilities => ['CAPABILITY_IAM']
+          },
+          :credentials => config.get(:orchestration, :api, :credentials),
+          :file => payload.get(:data, :stacks, :template),
+          :file_path_prompt => false,
+          :poll => false
         )
       end
 
@@ -81,21 +109,43 @@ module Jackal
       #
       # @param payload [Smash]
       # @param directory [String]
+      # @note parameter precedence:
+      #   * Hook URL parameters
+      #   * Payload parameters
+      #   * Stacks file parameters
+      #   * Service configuration parameters
       def load_stack_parameters(payload, directory)
-        stack_name = payload.get(:data, :stacks, :name)
         params = Smash.new
-        file_path = File.join(directory, '.stacks')
-        if(File.exists?(file_path))
-          stacks_file = Bogo::Config.new(file_path).data
-          params.deep_merge!(stacks_file.fetch(stack_name, Smash.new))
-        end
+        stacks_file = load_stacks_file(payload, directory)
+        s_namespace = determine_namespace(payload)
+        template = payload.get(:data, :stacks, :template)
+        params.deep_merge!(payload.fetch(:data, :webhook, :query, :stacks, :parameters, Smash.new))
         params.deep_merge!(payload.fetch(:data, :stacks, :parameters, Smash.new))
         params.deep_merge!(
-          config.fetch(:parameter_overrides, payload.get(:data, :stacks, :template),
-            config.fetch(:parameter_overrides, :default, Smash.new)
+          stacks_file.fetch(s_namespace, template, :parameters,
+            stacks_file.fetch(:default, template, :parameters, Smash.new)
+          )
+        )
+        params.deep_merge!(
+          config.fetch(:parameter_overrides, s_namespace, template,
+            config.fetch(:parameter_overrides, :default, template, Smash.new)
           )
         )
         params
+      end
+
+      # Parse the `.stacks` file if available
+      #
+      # @param payload [Smash]
+      # @param directory [String] path to unpacked asset directory
+      # @return [Smash]
+      def load_stacks_file(payload, directory)
+        stacks_path = File.join(directory, '.stacks')
+        if(File.exists?(stacks_path))
+          Bogo::Config.new(file_path).data
+        else
+          Smash.new
+        end
       end
 
       # Perform stack action
@@ -105,12 +155,12 @@ module Jackal
       # @param action [Symbol, String] :create or :update
       # @return [TrueClass]
       def run_stack(payload, directory, action)
-        unless([:create, :upgrade].include?(action.to_sym))
-          abort ArgumentError.new("Invalid action argument `#{action}`. Expecting `create` or `upgrade`!")
+        unless([:create, :update].include?(action.to_sym))
+          abort ArgumentError.new("Invalid action argument `#{action}`. Expecting `create` or `update`!")
         end
         args = build_stack_args(payload, directory)
         stack_name = payload.get(:data, :stacks, :name)
-        Sfn::Command.const_get(action.to_s.capitalize).new(args, stack_name).execute!
+        Sfn::Command.const_get(action.to_s.capitalize).new(args, [stack_name]).execute!
         true
       end
 
@@ -120,14 +170,61 @@ module Jackal
       # @param payload [Smash]
       # @return [TrueClass, FalseClass]
       def allowed?(payload)
-        if(config.get(:restrictions, :reference))
-          restrict_to = [config.get(:restrictions, :reference)].flatten.compact
-          !!payload.get(:data, :code_fetcher, :info, :reference).to_s.split('/').detect do |part|
-            restrict_to.include?(part)
+        !!determine_namespace(payload)
+      end
+
+      # Initialize provider if instructed via config
+      #
+      # @param payload [Smash]
+      # @note this currently init's chef related items
+      def init_provider(payload)
+        if(config.get(:init, :chef, :validator) || config.get(:init, :chef, :encrypted_secret))
+          bucket = stacks_api.api_for(:storage).buckets.get(config.get(:orchestration, :bucket_name))
+          validator_name = name_for(payload, 'validator.pem')
+          if(config.get(:init, :chef, :validator) && bucket.files.get(validator_name).nil?)
+            file = bucket.files.build(:name => validator_name)
+            file.body = OpenSSL::PKey::RSA.new(2048).export
+            file.save
           end
-        else
-          true
+          secret_name = name_for(payload, 'encrypted_data_bag_secret')
+          if(config.get(:init, :chef, :encrypted_secret) && bucket.files.get(secret_name).nil?)
+            file = bucket.files.build(:name => secret_name)
+            file.body = SecureRandom.base64(2048)
+            file.save
+          end
         end
+      end
+
+      # Store stable asset in object store
+      #
+      # @param payload [Smash]
+      def store_stable_asset(payload, directory)
+        if(config.get(:init, :stable))
+          ['rm -rf .librarian Gemfile Gemfile.lock', 'librarian-chef install', 'rm -rf tmp'].each do |cmd|
+            info "Starting stable store pre-pack command: #{cmd}"
+            process_manager.process(payload[:id], cmd) do |process|
+              process.cwd = directory
+              process.start
+              process.wait
+              raise 'Cookbook install failed!' unless process.exit_code == 0
+            end
+            info "Completed stable store pre-pack command: #{cmd}"
+          end
+          bucket = stacks_api.api_for(:storage).buckets.get(config.get(:orchestration, :bucket_name))
+          stable_name = name_for(payload, 'stable.zip')
+          file = bucket.files.get(stable_name) || bucket.files.build(:name => stable_name)
+          file.body = asset_store.pack(directory)
+          file.save
+        end
+      end
+
+      # Provide prefixed key name for asset
+      #
+      # @param payload [Smash]
+      # @param asset_name [String
+      # @return [String]
+      def name_for(payload, asset_name)
+        File.join(determine_namespace(payload), asset_name)
       end
 
     end
