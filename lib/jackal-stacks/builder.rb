@@ -5,6 +5,8 @@ module Jackal
     # Stack builder
     class Builder < Callback
 
+      include StackCommon
+
       # Setup callback
       def setup(*_)
         require 'sfn'
@@ -204,12 +206,16 @@ module Jackal
             info "Starting stable store pre-pack command: #{cmd}"
             process_manager.process(payload[:id], cmd) do |process|
               process.cwd = directory
+              process.io.inherit!
               process.start
               process.wait
-              raise 'Cookbook install failed!' unless process.exit_code == 0
+              unless(process.exit_code == 0)
+                raise 'Cookbook install failed!'
+              end
             end
             info "Completed stable store pre-pack command: #{cmd}"
           end
+          debug "Starting stable asset upload for #{payload[:id]}"
           bucket = stacks_api.api_for(:storage).buckets.get(config.get(:orchestration, :bucket_name))
           stable_name = name_for(payload, 'stable.zip')
           file = bucket.files.get(stable_name) || bucket.files.build(:name => stable_name)
@@ -223,8 +229,12 @@ module Jackal
       # @param payload [Smash]
       # @param asset_name [String
       # @return [String]
+      # @note this is currently a no-op and thus are shared across
+      #   stacks. currently is stubbed for completion of template and
+      #   interaction logic
       def name_for(payload, asset_name)
         File.join(determine_namespace(payload), asset_name)
+        asset_name
       end
 
     end
