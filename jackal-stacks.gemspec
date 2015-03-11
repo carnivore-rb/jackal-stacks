@@ -10,8 +10,8 @@ Gem::Specification.new do |s|
   s.description = 'Build stuff!'
   s.require_path = 'lib'
   s.license = 'Apache 2.0'
-  s.add_dependency 'jackal'
-  s.add_dependency 'librarian-chef'
-  s.add_dependency 'sfn'
+  s.add_runtime_dependency 'jackal'
+  s.add_runtime_dependency 'batali'
+  s.add_runtime_dependency 'sfn'
   s.files = Dir['lib/**/*'] + %w(jackal-stacks.gemspec README.md CHANGELOG.md CONTRIBUTING.md LICENSE)
 end

@@ -202,7 +202,7 @@ module Jackal
       # @param payload [Smash]
       def store_stable_asset(payload, directory)
         if(config.get(:init, :stable))
-          ['rm -rf .librarian Gemfile Gemfile.lock', 'librarian-chef install', 'rm -rf tmp'].each do |cmd|
+          ['rm -rf .batali Gemfile Gemfile.lock', 'batali install'].each do |cmd|
             info "Starting stable store pre-pack command: #{cmd}"
             process_manager.process(payload[:id], cmd) do |process|
               process.cwd = directory
@@ -221,6 +221,7 @@ module Jackal
           file = bucket.files.get(stable_name) || bucket.files.build(:name => stable_name)
           file.body = asset_store.pack(directory)
           file.save
+          debug "Completed stable asset upload for #{payload[:id]}"
         end
       end
 
