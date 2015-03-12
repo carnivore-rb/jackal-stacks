@@ -213,7 +213,9 @@ module Jackal
           end
           if(File.exists?(File.join(directory, 'batali.manifest')))
             debug 'Installing cookbooks from Batali manifest'
-            Batali::Command::Install.new({}, []).execute!
+            Dir.chdir(directory) do
+              Batali::Command::Install.new({}, []).execute!
+            end
           end
           debug "Starting stable asset upload for #{payload[:id]}"
           bucket = stacks_api.api_for(:storage).buckets.get(config.get(:orchestration, :bucket_name))
