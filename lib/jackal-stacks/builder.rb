@@ -13,6 +13,8 @@ module Jackal
         require 'bogo-ui'
         require 'stringio'
         require 'openssl'
+        require 'fileutils'
+        require 'batali'
         # Ensure we can build the API at startup
         stacks_api
       end
@@ -202,18 +204,16 @@ module Jackal
       # @param payload [Smash]
       def store_stable_asset(payload, directory)
         if(config.get(:init, :stable))
-          ['rm -rf .batali Gemfile Gemfile.lock', 'batali install'].each do |cmd|
-            info "Starting stable store pre-pack command: #{cmd}"
-            process_manager.process(payload[:id], cmd) do |process|
-              process.cwd = directory
-              process.io.inherit!
-              process.start
-              process.wait
-              unless(process.exit_code == 0)
-                raise 'Cookbook install failed!'
-              end
+          ['.batali', 'Gemfile', 'Gemfile.lock'].each do |file|
+            file_path = File.join(directory, file)
+            if(File.exists?(file_path))
+              debug "Removing file from infra directory: #{file}"
+              FileUtils.rm(file_path)
             end
-            info "Completed stable store pre-pack command: #{cmd}"
+          end
+          if(File.exists?(File.join(directory, 'batali.manifest')))
+            debug 'Installing cookbooks from Batali manifest'
+            Batali::Command::Install.new({}, []).execute!
           end
           debug "Starting stable asset upload for #{payload[:id]}"
           bucket = stacks_api.api_for(:storage).buckets.get(config.get(:orchestration, :bucket_name))
