@@ -34,7 +34,12 @@ module Jackal
       # @return [String] stack name
       def stack_name(payload)
         s_namespace = determine_namespace(payload)
-        "#{s_namespace}-#{payload.get(:data, :stacks, :template).sub(/\.[a-z]+$/, '').gsub(/[^A-Za-z0-9\-]/, '-')}"
+        s_project = payload.fetch(:data, :stacks, :project, SecureRandom.urlsafe_base64)
+        [
+          s_namespace,
+          s_project,
+          payload.get(:data, :stacks, :template).sub(/\.[a-z]+$/, '')
+        ].join('-').gsub(/[^A-Za-z0-9\-]/, '-')
       end
 
     end
