@@ -20,6 +20,10 @@ module Jackal
             payload.set(:data, :stacks, :reference,
               payload.get(:data, :code_fetcher, :info, :reference)
             )
+            payload.set(:data, :stacks, :project,
+              [payload.get(:data, :code_fetcher, :info, :owner),
+                payload.get(:data, :code_fetcher, :info, :name)].join('_')
+            )
           end
         end
 
