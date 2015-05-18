@@ -101,7 +101,7 @@ module Jackal
             :capabilities => ['CAPABILITY_IAM']
           },
           :credentials => config.get(:orchestration, :api, :credentials),
-          :file => payload.get(:data, :stacks, :template),
+          :file => payload.fetch(:data, :stacks, :template, config.get(:default_template_path)),
           :file_path_prompt => false,
           :poll => false
         )
