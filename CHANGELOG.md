@@ -1,3 +1,6 @@
+# v0.1.4
+* Add service registration
+
 # v0.1.2
 * Replace librarian usage with batali
 * Perform resolution within running process
