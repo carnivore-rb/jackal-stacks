@@ -19,6 +19,10 @@ Jackal.service(
     :orchestration__bucket_name => {
       :description => 'Name of remote bucket used for infrastructure storage'
     },
+    :orchestration__api__provider => {
+      :description => 'Remote orchestration provider',
+      :type => :string
+    },
     :orchestration__api__credentials => {
       :description => 'Remove credentials for API access',
       :type => :hash
