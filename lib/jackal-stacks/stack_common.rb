@@ -6,7 +6,7 @@ module Jackal
 
       # @return [Miasma::Models::Orchestration]
       def stacks_api
-        memoize(:stacks_api, :direct) do
+        memoize(:stacks_api, config.to_smash.checksum) do
           Miasma.api(
             config.fetch(
               :orchestration, :api, Smash.new
