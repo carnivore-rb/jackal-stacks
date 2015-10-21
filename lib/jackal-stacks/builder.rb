@@ -32,19 +32,6 @@ module Jackal
         end
       end
 
-      # @return [String] working directory
-      def working_directory
-        memoize(:working_directory, :direct) do
-          FileUtils.mkdir_p(dir = config.fetch(:working_directory, '/tmp/jackal-stack-builder'))
-          dir
-        end
-      end
-
-      # @return [String] fresh working directory
-      def workspace(payload)
-        File.join(working_directory, payload[:id])
-      end
-
       # Build or update stacks
       #
       # @param message [Carnivore::Message]
@@ -165,6 +152,19 @@ module Jackal
         args = build_stack_args(payload, directory)
         stack_name = payload.get(:data, :stacks, :name)
         Sfn::Command.const_get(action.to_s.capitalize).new(args, [stack_name]).execute!
+        wait_for_complete(stacks_api.stacks.get(stack_name))
+        true
+      end
+
+      # Wait for stack to reach a completion state
+      #
+      # @param stack [Miasma::Models::Orchestration::Stack]
+      # @return [TrueClass]
+      def wait_for_complete(stack)
+        until(stack.state.to_s.donwcase.end_with?('complete') || stack.state.to_s.donwcase.end_with?('failed'))
+          sleep(10)
+          stack.reload
+        end
         true
       end
 
