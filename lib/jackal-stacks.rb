@@ -24,7 +24,7 @@ Jackal.service(
       :type => :string
     },
     :orchestration__api__credentials => {
-      :description => 'Remove credentials for API access',
+      :description => 'Credentials for orchestration API access',
       :type => :hash
     },
     :default_template_path => {
