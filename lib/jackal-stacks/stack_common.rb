@@ -6,15 +6,16 @@ module Jackal
 
       # @return [Miasma::Models::Orchestration]
       def stacks_api
-        memoize(:stacks_api, config.to_smash.checksum) do
-          Miasma.api(
-            config.fetch(
-              :orchestration, :api, Smash.new
-            ).merge(
-              :type => :orchestration
-            )
-          )
+        memoize(:stacks_api, api_config.to_smash.checksum) do
+          Miasma.api(api_config)
         end
+      end
+
+      # @return [Hash] API connection configuration
+      def api_config
+        config.fetch(:orchestration, :api, Smash.new).merge(
+          :type => :orchestration
+        )
       end
 
       # Determine namespace key to use for accessing parameters
