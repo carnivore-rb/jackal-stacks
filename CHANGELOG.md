@@ -1,3 +1,8 @@
+# v0.1.6
+* Add wait helper on expected stack state
+* Provide explicit method to extract API configuration
+* Add provider entry to configuration items
+
 # v0.1.4
 * Add service registration
 
