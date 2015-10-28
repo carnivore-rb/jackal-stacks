@@ -16,6 +16,10 @@ Jackal.service(
   :stacks,
   :description => 'Manage stacks',
   :configuration => {
+    :mappings => {
+      :description => 'Stack namespace mapping',
+      :type => :hash
+    },
     :orchestration__bucket_name => {
       :description => 'Name of remote bucket used for infrastructure storage'
     },
