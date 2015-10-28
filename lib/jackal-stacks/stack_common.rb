@@ -40,7 +40,7 @@ module Jackal
           s_namespace,
           s_project,
           payload.get(:data, :stacks, :template).sub(/\.[a-z]+$/, '')
-        ].join('-').gsub(/[^A-Za-z0-9\-]/, '-')
+        ].compact.join('-').gsub(/[^A-Za-z0-9\-]/, '-')
       end
 
     end
