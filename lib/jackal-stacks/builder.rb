@@ -25,8 +25,8 @@ module Jackal
       # @return [Truthy, Falsey]
       def valid?(message)
         super do |payload|
-          payload.get(:data, :stacks, :builder) &&
-            payload.get(:data, :stacks, :template) &&
+          (!block_given || yield(payload)) &&
+            payload.get(:data, :stacks, :builder) &&
             payload.get(:data, :stacks, :asset) &&
             allowed?(payload)
         end
@@ -41,6 +41,9 @@ module Jackal
           begin
             unless(payload.get(:data, :stacks, :name))
               payload.set(:data, :stacks, :name, stack_name(payload))
+            end
+            unless(payload.get(:data, :stacks, :template))
+              payload.set(:data, :stacks, :template, 'infrastructure')
             end
             store_stable_asset(payload, directory)
             begin
