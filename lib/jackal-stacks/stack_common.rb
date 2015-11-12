@@ -6,9 +6,7 @@ module Jackal
 
       # @return [Miasma::Models::Orchestration]
       def stacks_api
-        memoize(:stacks_api, api_config.to_smash.checksum) do
-          Miasma.api(api_config)
-        end
+        Miasma.api(api_config)
       end
 
       # @return [Hash] API connection configuration
