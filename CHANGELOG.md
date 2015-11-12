@@ -1,3 +1,7 @@
+# v0.1.10
+* Fix block check during validation
+* Remove API provider build during setup
+
 # v0.1.8
 * Add configuration entry for mappings
 * Remove empty name parts prior to join
