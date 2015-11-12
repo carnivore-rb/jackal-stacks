@@ -15,8 +15,6 @@ module Jackal
         require 'openssl'
         require 'fileutils'
         require 'batali'
-        # Ensure we can build the API at startup
-        stacks_api
       end
 
       # Determine validity of message
@@ -25,7 +23,7 @@ module Jackal
       # @return [Truthy, Falsey]
       def valid?(message)
         super do |payload|
-          (!block_given || yield(payload)) &&
+          (!block_given? || yield(payload)) &&
             payload.get(:data, :stacks, :builder) &&
             payload.get(:data, :stacks, :asset) &&
             allowed?(payload)
