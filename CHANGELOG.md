@@ -1,3 +1,6 @@
+# v0.1.12
+* Adjust location of stack name set
+
 # v0.1.10
 * Fix block check during validation
 * Remove API provider build during setup
