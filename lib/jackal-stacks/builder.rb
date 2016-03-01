@@ -37,11 +37,11 @@ module Jackal
         failure_wrap(message) do |payload|
           directory = asset_store.unpack(asset_store.get(payload.get(:data, :stacks, :asset)), workspace(payload))
           begin
-            unless(payload.get(:data, :stacks, :name))
-              payload.set(:data, :stacks, :name, stack_name(payload))
-            end
             unless(payload.get(:data, :stacks, :template))
               payload.set(:data, :stacks, :template, 'infrastructure')
+            end
+            unless(payload.get(:data, :stacks, :name))
+              payload.set(:data, :stacks, :name, stack_name(payload))
             end
             store_stable_asset(payload, directory)
             begin
