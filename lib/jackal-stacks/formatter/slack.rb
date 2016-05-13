@@ -17,13 +17,13 @@ module Jackal
         #
         # @param payload [Smash]
         def format(payload)
-          if(payload.get(:data, :stacks))
-            unless((notify = payload.fetch(:data, :stacks, {}).keys & NOTIFY_ON).empty?)
+          if(payload.get(:data, :stacks, :name))
+            unless(notify = NOTIFY_ON.detect{|n| payload.get(:data, :stacks, n)})
               msgs = payload.fetch(:data, :slack, :messages, [])
               msgs << Smash.new(
-                :description => "Stacks result: #{notify.first}",
+                :description => "Stacks result: #{notify}",
                 :message => [
-                  "Stack has been #{notify.first} [name: #{payload.get(:data, :stacks, :name)}]",
+                  "Stack has been #{notify} [name: #{payload.get(:data, :stacks, :name)}]",
                   "* Template: #{payload.get(:data, :stacks, :template)}",
                   "* Repository: #{payload.get(:data, :code_fetcher, :info, :owner)}/#{payload.get(:data, :code_fetcher, :info, :name)}",
                   "* Reference: #{payload.get(:data, :code_fetcher, :info, :reference)}",
